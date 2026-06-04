@@ -18,15 +18,31 @@ interface AlipayConfig {
   gatewayUrl: string;
 }
 
+function wrapPem(base64Body: string, label: string): string {
+  const keyType = label === "ALIPAY_PRIVATE_KEY" ? "PRIVATE KEY" : "PUBLIC KEY";
+  const normalizedBody = base64Body.replace(/\s+/g, "");
+  const lines = normalizedBody.match(/.{1,64}/g)?.join("\n") ?? normalizedBody;
+  return `-----BEGIN ${keyType}-----\n${lines}\n-----END ${keyType}-----`;
+}
+
 function normalizePem(value: string | undefined, label: string): string {
   const normalized = value?.replace(/\\n/g, "\n").trim();
   if (!normalized) throw new AlipayConfigError(`${label} is not configured.`);
-  return normalized;
+  if (normalized.includes("-----BEGIN ")) return normalized;
+  return wrapPem(normalized, label);
+}
+
+function normalizeAppId(value: string | undefined): string {
+  const appId = value?.trim();
+  if (!appId) throw new AlipayConfigError("ALIPAY_APP_ID is not configured.");
+  if (!/^\d{10,32}$/.test(appId)) {
+    throw new AlipayConfigError("ALIPAY_APP_ID must be the numeric Alipay Open Platform application ID.");
+  }
+  return appId;
 }
 
 function loadConfig(): AlipayConfig {
-  const appId = process.env.ALIPAY_APP_ID?.trim();
-  if (!appId) throw new AlipayConfigError("ALIPAY_APP_ID is not configured.");
+  const appId = normalizeAppId(process.env.ALIPAY_APP_ID);
 
   return {
     appId,
@@ -34,6 +50,21 @@ function loadConfig(): AlipayConfig {
     alipayPublicKeyPem: normalizePem(process.env.ALIPAY_PUBLIC_KEY, "ALIPAY_PUBLIC_KEY"),
     gatewayUrl: process.env.ALIPAY_GATEWAY_URL?.trim() || DEFAULT_GATEWAY,
   };
+}
+
+export function isAlipayConfigReady(): boolean {
+  try {
+    const config = loadConfig();
+    createPrivateKey(config.privateKeyPem);
+    createPublicKey(config.alipayPublicKeyPem);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+export function getAlipayAppId(): string {
+  return loadConfig().appId;
 }
 
 function alipayTimestamp(): string {
@@ -54,9 +85,9 @@ function alipayTimestamp(): string {
   ].join("");
 }
 
-function canonicalize(params: Record<string, string>): string {
+function canonicalize(params: Record<string, string>, options?: { excludeSignType?: boolean }): string {
   return Object.keys(params)
-    .filter((key) => key !== "sign" && key !== "sign_type" && params[key] !== "")
+    .filter((key) => key !== "sign" && (!options?.excludeSignType || key !== "sign_type") && params[key] !== "")
     .sort()
     .map((key) => `${key}=${params[key]}`)
     .join("&");
@@ -109,7 +140,11 @@ export function verifyAlipayNotify(params: Record<string, string>): boolean {
   const signature = params.sign;
   if (!signature) return false;
 
-  const verifier = createVerify("RSA-SHA256");
-  verifier.update(canonicalize(params), "utf8");
-  return verifier.verify(createPublicKey(config.alipayPublicKeyPem), signature, "base64");
+  try {
+    const verifier = createVerify("RSA-SHA256");
+    verifier.update(canonicalize(params, { excludeSignType: true }), "utf8");
+    return verifier.verify(createPublicKey(config.alipayPublicKeyPem), signature, "base64");
+  } catch {
+    return false;
+  }
 }

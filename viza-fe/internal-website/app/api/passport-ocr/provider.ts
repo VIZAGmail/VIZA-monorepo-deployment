@@ -18,6 +18,10 @@ interface OpenAIMessageInput {
   content: OpenAIContentPart[];
 }
 
+interface OpenAIExtractionOptions {
+  unreadableRetry?: boolean;
+}
+
 interface RawProviderFields {
   full_name: string | null;
   given_names: string | null;
@@ -33,11 +37,17 @@ interface RawProviderFields {
 
 type RawFieldConfidence = Record<keyof RawProviderFields, number | null>;
 
+interface RawProviderMrz {
+  line1: string | null;
+  line2: string | null;
+}
+
 interface RawProviderOutput {
   is_readable: boolean;
   confidence: number;
   fields: RawProviderFields;
   field_confidence: RawFieldConfidence;
+  mrz: RawProviderMrz;
 }
 
 interface OpenAIErrorBody {
@@ -64,7 +74,7 @@ const DEFAULT_OPENAI_MODEL = "gpt-4o-mini";
 const PASSPORT_SCHEMA = {
   type: "object",
   additionalProperties: false,
-  required: ["is_readable", "confidence", "fields", "field_confidence"],
+  required: ["is_readable", "confidence", "fields", "field_confidence", "mrz"],
   properties: {
     is_readable: { type: "boolean" },
     confidence: { type: "number", minimum: 0, maximum: 1 },
@@ -122,6 +132,15 @@ const PASSPORT_SCHEMA = {
         issue_date: { type: ["number", "null"], minimum: 0, maximum: 1 },
         expiry_date: { type: ["number", "null"], minimum: 0, maximum: 1 },
         gender: { type: ["number", "null"], minimum: 0, maximum: 1 },
+      },
+    },
+    mrz: {
+      type: "object",
+      additionalProperties: false,
+      required: ["line1", "line2"],
+      properties: {
+        line1: { type: ["string", "null"] },
+        line2: { type: ["string", "null"] },
       },
     },
   },
@@ -212,9 +231,87 @@ function normalizeGender(value: string | null): string | null {
   return null;
 }
 
+function normalizeMrzLine(value: string | null): string | null {
+  const normalized = cleanText(value)
+    ?.toUpperCase()
+    .replace(/\s+/g, "")
+    .replace(/[^A-Z<]/g, "");
+  return normalized || null;
+}
+
+function parseMrzName(line1: string | null): Pick<RawProviderFields, "full_name" | "given_names" | "surname"> | null {
+  const normalized = normalizeMrzLine(line1);
+  if (!normalized || !normalized.includes("<<")) return null;
+
+  const namePart = normalized.length >= 5 ? normalized.slice(5) : normalized;
+  const separatorIndex = namePart.indexOf("<<");
+  if (separatorIndex <= 0) return null;
+
+  const surname = cleanText(namePart.slice(0, separatorIndex).replace(/</g, " "));
+  const givenNames = cleanText(namePart.slice(separatorIndex + 2).replace(/</g, " "));
+  if (!surname && !givenNames) return null;
+
+  return {
+    full_name: cleanText([givenNames, surname].filter(Boolean).join(" ")),
+    given_names: givenNames,
+    surname,
+  };
+}
+
+function containsCjk(value: string | null): boolean {
+  return /[\u3400-\u9fff]/.test(value ?? "");
+}
+
+function preferMrzLatinName(raw: RawProviderOutput, warnings: string[]) {
+  const mrzName = parseMrzName(raw.mrz.line1);
+  if (!mrzName) return raw.fields;
+
+  if (
+    containsCjk(raw.fields.full_name) ||
+    containsCjk(raw.fields.given_names) ||
+    containsCjk(raw.fields.surname)
+  ) {
+    warnings.push("name_latinized_from_mrz");
+  }
+
+  return {
+    ...raw.fields,
+    full_name: mrzName.full_name ?? raw.fields.full_name,
+    given_names: mrzName.given_names ?? raw.fields.given_names,
+    surname: mrzName.surname ?? raw.fields.surname,
+  };
+}
+
+function repairLatinNameParts(fields: RawProviderFields, warnings: string[]): RawProviderFields {
+  const fullName = cleanText(fields.full_name);
+  const givenNames = cleanText(fields.given_names);
+  const surname = cleanText(fields.surname);
+  if (!fullName || !givenNames || !surname) return fields;
+  if (containsCjk(fullName) || containsCjk(givenNames) || containsCjk(surname)) return fields;
+  if (surname !== fullName) return fields;
+
+  const prefix = `${givenNames} `;
+  const suffix = ` ${givenNames}`;
+  let repairedSurname: string | null = null;
+
+  if (fullName.startsWith(prefix)) {
+    repairedSurname = cleanText(fullName.slice(prefix.length));
+  } else if (fullName.endsWith(suffix)) {
+    repairedSurname = cleanText(fullName.slice(0, -suffix.length));
+  }
+
+  if (!repairedSurname) return fields;
+
+  warnings.push("surname_repaired_from_full_name");
+  return {
+    ...fields,
+    surname: repairedSurname,
+  };
+}
+
 function normalizeFields(raw: RawProviderOutput): { fields: PassportOcrProposedFields; warnings: string[] } {
   const warnings: string[] = [];
-  const fields = raw.fields;
+  const fields = repairLatinNameParts(preferMrzLatinName(raw, warnings), warnings);
   const confidence = raw.field_confidence;
 
   return {
@@ -277,6 +374,10 @@ function parseRawProviderOutput(value: unknown): RawProviderOutput | null {
       expiry_date: nullableConfidence(value.field_confidence.expiry_date),
       gender: nullableConfidence(value.field_confidence.gender),
     },
+    mrz: {
+      line1: isRecord(value.mrz) ? nullableString(value.mrz.line1) : null,
+      line2: isRecord(value.mrz) ? nullableString(value.mrz.line2) : null,
+    },
   };
 }
 
@@ -314,7 +415,11 @@ function buildFilePart(file: PassportOcrFile): OpenAIContentPart {
   };
 }
 
-function buildOpenAIInput(file: PassportOcrFile): OpenAIMessageInput[] {
+function buildOpenAIInput(file: PassportOcrFile, options: OpenAIExtractionOptions = {}): OpenAIMessageInput[] {
+  const retryText = options.unreadableRetry
+    ? "The passport page may be sideways, upside down, photographed at an angle, or embedded inside a PDF page. Rotate it mentally as needed. If the passport bio page, visual inspection zone, or MRZ is visible enough to read any requested fields, set is_readable to true and return null only for fields that remain uncertain. Set is_readable to false only when no passport bio page is visible or all requested fields are genuinely illegible."
+    : "";
+
   return [
     {
       role: "system",
@@ -323,7 +428,9 @@ function buildOpenAIInput(file: PassportOcrFile): OpenAIMessageInput[] {
           type: "input_text",
           text:
             "Extract only visible passport bio page fields. Return null for missing or uncertain fields. " +
-            "Do not infer values that are not visible. Dates must be YYYY-MM-DD when possible.",
+            "Do not infer values that are not visible. Dates must be YYYY-MM-DD when possible. " +
+            "For all name fields, return the Latin alphabet/romanized passport name from the visual inspection zone or MRZ; never return local-script names such as Chinese characters. " +
+            "Sideways or rotated passport photos should still be read when the printed fields or MRZ are visible.",
         },
       ],
     },
@@ -335,7 +442,9 @@ function buildOpenAIInput(file: PassportOcrFile): OpenAIMessageInput[] {
           text:
             "Read this passport document for a confirmation workflow. Extract proposed full name, given names, " +
             "surname, passport number, date of birth, nationality, issuing country, issue date, expiry date, " +
-            "and gender if available. This data will not be written until the applicant confirms it.",
+            "gender, and MRZ lines if available. Name fields must use the Latin/MRZ spelling, not the local-script name. " +
+            "This data will not be written until the applicant confirms it. " +
+            retryText,
         },
         buildFilePart(file),
       ],
@@ -375,6 +484,21 @@ function isOpenAIModelAccessError(response: Response, body: OpenAIErrorBody | nu
   );
 }
 
+function isOpenAIConfigurationError(response: Response, body: OpenAIErrorBody | null): boolean {
+  const code = body?.error?.code ?? "";
+  const message = body?.error?.message?.toLowerCase() ?? "";
+  return (
+    response.status === 401 ||
+    response.status === 402 ||
+    code === "invalid_api_key" ||
+    code === "insufficient_quota" ||
+    message.includes("api key") ||
+    message.includes("credit") ||
+    message.includes("quota") ||
+    message.includes("billing")
+  );
+}
+
 async function extractWithOpenAI(file: PassportOcrFile): Promise<PassportOcrProviderResult> {
   const apiKey = process.env.PASSPORT_OCR_OPENAI_API_KEY ?? process.env.OPENAI_API_KEY;
   if (!apiKey || apiKey === "your_openai_api_key_here") {
@@ -386,79 +510,93 @@ async function extractWithOpenAI(file: PassportOcrFile): Promise<PassportOcrProv
   }
 
   const modelCandidates = getOpenAIModelCandidates();
+  let unreadableResult: PassportOcrProviderResult | null = null;
   for (let index = 0; index < modelCandidates.length; index += 1) {
     const model = modelCandidates[index];
-    const response = await fetch("https://api.openai.com/v1/responses", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${apiKey}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        model,
-        input: buildOpenAIInput(file),
-        max_output_tokens: 900,
-        text: {
-          format: {
-            type: "json_schema",
-            name: "passport_ocr_fields",
-            strict: true,
-            schema: PASSPORT_SCHEMA,
-          },
+    for (const unreadableRetry of [false, true]) {
+      const response = await fetch("https://api.openai.com/v1/responses", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${apiKey}`,
+          "Content-Type": "application/json",
         },
-      }),
-    });
+        body: JSON.stringify({
+          model,
+          input: buildOpenAIInput(file, { unreadableRetry }),
+          max_output_tokens: 900,
+          text: {
+            format: {
+              type: "json_schema",
+              name: "passport_ocr_fields",
+              strict: true,
+              schema: PASSPORT_SCHEMA,
+            },
+          },
+        }),
+      });
 
-    if (!response.ok) {
-      const errorBody = await parseOpenAIErrorBody(response);
-      const isModelError = isOpenAIModelAccessError(response, errorBody);
-      if (isModelError && index < modelCandidates.length - 1) continue;
+      if (!response.ok) {
+        const errorBody = await parseOpenAIErrorBody(response);
+        const isModelError = isOpenAIModelAccessError(response, errorBody);
+        if (isModelError && index < modelCandidates.length - 1) break;
 
-      const retryable = response.status === 429 || response.status >= 500;
-      throw new PassportOcrProviderError(
-        retryable || isModelError ? "provider_unavailable" : "provider_failed",
-        isModelError
-          ? "Passport OCR model is not available in this environment."
-          : retryable
-            ? "Passport OCR provider is temporarily unavailable."
-            : "Passport OCR provider rejected the request.",
-        retryable,
-      );
-    }
+        if (isOpenAIConfigurationError(response, errorBody)) {
+          throw new PassportOcrProviderError(
+            "provider_unavailable",
+            "Passport OCR provider credentials or billing are not available.",
+            false,
+          );
+        }
 
-    const responseBody: unknown = await response.json();
-    const outputText = extractOutputText(responseBody);
-    if (!outputText) {
-      throw new PassportOcrProviderError("unreadable", "The passport could not be read.", false);
-    }
+        const retryable = response.status === 429 || response.status >= 500;
+        throw new PassportOcrProviderError(
+          retryable || isModelError ? "provider_unavailable" : "provider_failed",
+          isModelError
+            ? "Passport OCR model is not available in this environment."
+            : retryable
+              ? "Passport OCR provider is temporarily unavailable."
+              : "Passport OCR provider rejected the request.",
+          retryable,
+        );
+      }
 
-    let parsedJson: unknown;
-    try {
-      parsedJson = JSON.parse(outputText);
-    } catch {
-      throw new PassportOcrProviderError("unreadable", "The passport could not be read.", false);
-    }
+      const responseBody: unknown = await response.json();
+      const outputText = extractOutputText(responseBody);
+      if (!outputText) {
+        throw new PassportOcrProviderError("unreadable", "The passport could not be read.", false);
+      }
 
-    const raw = parseRawProviderOutput(parsedJson);
-    if (!raw || !raw.is_readable) {
+      let parsedJson: unknown;
+      try {
+        parsedJson = JSON.parse(outputText);
+      } catch {
+        throw new PassportOcrProviderError("unreadable", "The passport could not be read.", false);
+      }
+
+      const raw = parseRawProviderOutput(parsedJson);
+      if (!raw || !raw.is_readable) {
+        unreadableResult = {
+          provider: "openai_vision",
+          confidence: raw?.confidence ?? 0,
+          isReadable: false,
+          fields: EMPTY_FIELDS,
+          warnings: ["document_unreadable"],
+        };
+        continue;
+      }
+
+      const normalized = normalizeFields(raw);
       return {
         provider: "openai_vision",
-        confidence: raw?.confidence ?? 0,
-        isReadable: false,
-        fields: EMPTY_FIELDS,
-        warnings: ["document_unreadable"],
+        confidence: raw.confidence,
+        isReadable: true,
+        fields: normalized.fields,
+        warnings: normalized.warnings,
       };
     }
-
-    const normalized = normalizeFields(raw);
-    return {
-      provider: "openai_vision",
-      confidence: raw.confidence,
-      isReadable: true,
-      fields: normalized.fields,
-      warnings: normalized.warnings,
-    };
   }
+
+  if (unreadableResult) return unreadableResult;
 
   throw new PassportOcrProviderError(
     "provider_unavailable",

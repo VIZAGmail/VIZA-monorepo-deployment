@@ -13,7 +13,7 @@ namespace `/visa` and sends/receives streaming events.
 2. `registerVisaNamespace()` handles connection lifecycle.
 3. `visa_chat_message` saves the user message, assembles history, loads
    application context, updates structured conversation state, retrieves RAG
-   chunks, emits optional application redirect blocks, and streams Claude tokens.
+   chunks, emits optional application redirect blocks, and streams OpenAI tokens.
 4. Assistant output is persisted to `visa_chat_messages`.
 5. The frontend listens for `token`, `response_complete`, `error`,
    `application_block`, and diagnostic `app_log` events.
@@ -39,6 +39,10 @@ namespace `/visa` and sends/receives streaming events.
   recognized country is not in `VISA_SERVICE_COUNTRIES`, tell the user VIZA has
   not opened that country/region service yet and do not provide detailed RAG
   requirements or application links for it.
+- `npm run test:visa-agent-evals` is the required regression gate for this
+  namespace. It includes 1200+ product QA assertions, a 54 service country by
+  21 high-frequency question matrix, 14 long-conversation memory branches,
+  mixed Schengen/non-Schengen flows, and service-country-to-RAG-seed coverage.
 - Persist visible user/assistant messages idempotently. The frontend also has a
   Supabase-side `ensureSessionMessage()` fallback, so Socket.IO persistence must
   check for an existing exact session/role/content row before inserting.

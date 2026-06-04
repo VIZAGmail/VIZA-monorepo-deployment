@@ -52,6 +52,10 @@ import {
   getTeamApplicationContext,
   markTeamCompanionReviewed,
 } from "@/app/actions/application-group";
+import {
+  buildApplicationFormHref,
+  setRecentApplicationFormHref,
+} from "@/lib/client/recent-application-form";
 
 // ---------------------------------------------------------------------------
 // Step definitions
@@ -934,10 +938,27 @@ export default function ApplicationPage() {
   const [dynamicAnswers, setDynamicAnswers] = useState<Record<string, string>>({});
   const [documentCenterData, setDocumentCenterData] = useState<DocumentCenterData | null>(null);
   const [documentCenterError, setDocumentCenterError] = useState<string | null>(null);
+  const [localPassportBioPageName, setLocalPassportBioPageName] = useState<string | null>(null);
   const initialStepResolvedRef = useRef(false);
 
   const resolvedCountry = explicitCountry ?? visaPackage?.country ?? "indonesia";
   const resolvedVisaType = explicitVisaType ?? visaPackage?.visa_type ?? "tourist_b211a";
+
+  useEffect(() => {
+    const href = buildApplicationFormHref(
+      "/client/application/long-form",
+      searchParams.toString(),
+      {
+        country: resolvedCountry,
+        visaType: getFormVisaType(resolvedVisaType),
+      },
+    );
+    if (href) setRecentApplicationFormHref(href);
+  }, [
+    resolvedCountry,
+    resolvedVisaType,
+    searchParams,
+  ]);
 
   // Use DB-driven steps when available, otherwise fall back to hardcoded
   const useDynamic = dbSteps.length > 0;
@@ -957,6 +978,33 @@ export default function ApplicationPage() {
   const visibleDynamicSteps = useMemo(
     () => (useDynamic ? getVisibleDynamicSteps(dbSteps, dynamicAnswers) : []),
     [dbSteps, dynamicAnswers, useDynamic],
+  );
+  const firstFormStepId = useDynamic ? (visibleDynamicSteps[0]?.sourceIndex ?? 0) : 0;
+
+  const passportBioPageDocument = useMemo(
+    () =>
+      documentCenterData?.documents.find((document) =>
+        document.documentType === "passport_copy" ||
+        document.requirementKey === "passport_copy"
+      ) ?? null,
+    [documentCenterData],
+  );
+  const hasUniversalPassportPrefill = Boolean(
+    appState.passport.passportNumber ||
+    dynamicAnswers.passport_number ||
+    dynamicAnswers.passportNumber ||
+    dynamicAnswers.travel_document_number,
+  );
+  const passportOcrInitialFileName =
+    localPassportBioPageName ??
+    passportBioPageDocument?.filename ??
+    (hasUniversalPassportPrefill
+      ? (isZhInterface ? "已从通用资料读取护照信息" : "Loaded from universal profile")
+      : null);
+  const passportOcrInitialUploaded = Boolean(
+    localPassportBioPageName ||
+    passportBioPageDocument ||
+    hasUniversalPassportPrefill,
   );
 
   // Steps in DB source order — used only to build the grouped sections.
@@ -1821,11 +1869,14 @@ export default function ApplicationPage() {
                   </h2>
                   {/* Panel card */}
                   <div className="w-full rounded-xl border border-[#efefef] bg-white p-4 sm:p-6 md:p-8">
-                    {(useDynamic ? step.id < documentStepIndex : step.id <= 2) && (
+                    {step.id === firstFormStepId && (
                       <PassportOcrUpload
                         applicationId={appState.applicationId}
                         className="mb-6"
+                        initialFileName={passportOcrInitialFileName}
+                        initialUploaded={passportOcrInitialUploaded}
                         onFieldsApplied={handlePassportOcrFieldsApplied}
+                        onUploaded={setLocalPassportBioPageName}
                       />
                     )}
                     {useDynamic ? (

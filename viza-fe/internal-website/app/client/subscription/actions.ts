@@ -1,6 +1,6 @@
 "use server";
 
-import { randomBytes, randomUUID } from "node:crypto";
+import { randomBytes } from "node:crypto";
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { createAlipayPagePayUrl } from "@/lib/alipay/client";
@@ -10,7 +10,7 @@ import {
   getCommercialProduct,
   type CommercialPaymentProvider,
 } from "@/lib/payments/commercial-products";
-import { getAuthenticatedUser } from "@/lib/auth/get-authenticated-user";
+import { getCommercialAuthenticatedUser } from "@/lib/payments/commercial-session";
 import { createNativeOrder } from "@/lib/wechatpay/client";
 import {
   createStripeClient,
@@ -26,7 +26,16 @@ function getFormString(formData: FormData, key: string): string {
 }
 
 function normalizeProvider(value: string): CommercialPaymentProvider | null {
-  if (value === "stripe" || value === "wechat_pay" || value === "alipay") return value;
+  if (
+    value === "stripe" ||
+    value === "wechat_pay" ||
+    value === "alipay" ||
+    value === "airwallex_card" ||
+    value === "airwallex_wechat" ||
+    value === "airwallex_alipay"
+  ) {
+    return value;
+  }
   return null;
 }
 
@@ -58,6 +67,16 @@ function yuanAmount(amountFen: number): string {
   return (amountFen / 100).toFixed(2);
 }
 
+function isPaymentRecordStorageUnavailable(error: { message: string } | null): boolean {
+  const message = error?.message.toLowerCase() ?? "";
+  return (
+    message.includes("payment_records") &&
+    (message.includes("schema cache") ||
+      message.includes("does not exist") ||
+      message.includes("could not find the table"))
+  );
+}
+
 export async function startCommercialCheckout(formData: FormData): Promise<void> {
   const productId = getFormString(formData, "productId");
   const provider = normalizeProvider(getFormString(formData, "provider"));
@@ -82,8 +101,16 @@ export async function startCommercialCheckout(formData: FormData): Promise<void>
       destination = subscriptionUrl({ error: "alipay_unconfigured" });
       return;
     }
+    if (provider.startsWith("airwallex_") && !process.env.AIRWALLEX_CLIENT_ID?.trim()) {
+      destination = subscriptionUrl({ error: "airwallex_unconfigured" });
+      return;
+    }
+    if (provider.startsWith("airwallex_") && !process.env.AIRWALLEX_API_KEY?.trim()) {
+      destination = subscriptionUrl({ error: "airwallex_unconfigured" });
+      return;
+    }
 
-    const user = await getAuthenticatedUser();
+    const user = await getCommercialAuthenticatedUser();
     if (!user) {
       destination = "/client/login";
       return;
@@ -113,7 +140,7 @@ export async function startCommercialCheckout(formData: FormData): Promise<void>
         application_id: null,
         applicant_id: null,
         visa_package_id: null,
-        provider,
+        provider: provider.startsWith("airwallex_") ? "airwallex" : provider,
         provider_session_id: null,
         provider_payment_id: null,
         amount_cents: product.amountFen,
@@ -122,7 +149,6 @@ export async function startCommercialCheckout(formData: FormData): Promise<void>
         fee_type: commercialProductFeeType(product),
         receipt_url: null,
         auth_user_id: user.id,
-        idempotency_key: randomUUID(),
         metadata,
         created_at: now,
         updated_at: now,
@@ -130,21 +156,28 @@ export async function startCommercialCheckout(formData: FormData): Promise<void>
       .select("id")
       .single();
 
-    if (insertError || !paymentRecord) {
+    if (insertError) {
+      console.error("[subscription-payment] Failed to insert payment record:", insertError.message);
+    }
+
+    const canContinueWithoutRecord =
+      Boolean(insertError) && isPaymentRecordStorageUnavailable(insertError) && provider !== "wechat_pay";
+
+    if ((insertError || !paymentRecord) && !canContinueWithoutRecord) {
       destination = subscriptionUrl({ error: "payment_record_failed" });
       return;
     }
 
-    const paymentId = paymentRecord.id;
+    const paymentId = paymentRecord?.id ?? null;
     const successUrl = new URL("/client/subscription", appBaseUrl);
     successUrl.searchParams.set("payment", "success");
     successUrl.searchParams.set("provider", provider);
-    successUrl.searchParams.set("paymentId", paymentId);
+    if (paymentId) successUrl.searchParams.set("paymentId", paymentId);
 
     const cancelUrl = new URL("/client/subscription", appBaseUrl);
     cancelUrl.searchParams.set("payment", "cancelled");
     cancelUrl.searchParams.set("provider", provider);
-    cancelUrl.searchParams.set("paymentId", paymentId);
+    if (paymentId) cancelUrl.searchParams.set("paymentId", paymentId);
 
     if (provider === "stripe") {
       const stripe = createStripeClient();
@@ -154,6 +187,13 @@ export async function startCommercialCheckout(formData: FormData): Promise<void>
       }
 
       successUrl.searchParams.set("session_id", "{CHECKOUT_SESSION_ID}");
+
+      const stripeMetadata: Record<string, string> = {
+        userId: user.id,
+        productId: product.id,
+        feeType: commercialProductFeeType(product),
+      };
+      if (paymentId) stripeMetadata.paymentRecordId = paymentId;
 
       const session = await stripe.checkout.sessions.create({
         mode: product.kind === "monthly" ? "subscription" : "payment",
@@ -174,20 +214,15 @@ export async function startCommercialCheckout(formData: FormData): Promise<void>
         ],
         success_url: successUrl.toString().replace("%7BCHECKOUT_SESSION_ID%7D", "{CHECKOUT_SESSION_ID}"),
         cancel_url: cancelUrl.toString(),
-        client_reference_id: paymentId,
-        metadata: {
-          paymentRecordId: paymentId,
-          userId: user.id,
-          productId: product.id,
-          feeType: commercialProductFeeType(product),
-        },
+        client_reference_id: paymentId ?? `${product.id}:${user.id}`,
+        metadata: stripeMetadata,
         subscription_data:
           product.kind === "monthly"
             ? {
                 metadata: {
-                  paymentRecordId: paymentId,
                   userId: user.id,
                   productId: product.id,
+                  ...(paymentId ? { paymentRecordId: paymentId } : {}),
                 },
               }
             : undefined,
@@ -195,10 +230,10 @@ export async function startCommercialCheckout(formData: FormData): Promise<void>
           product.kind === "pay_per_application"
             ? {
                 metadata: {
-                  paymentRecordId: paymentId,
                   userId: user.id,
                   productId: product.id,
                   feeType: commercialProductFeeType(product),
+                  ...(paymentId ? { paymentRecordId: paymentId } : {}),
                 },
               }
             : undefined,
@@ -214,19 +249,50 @@ export async function startCommercialCheckout(formData: FormData): Promise<void>
         return;
       }
 
-      await createSubscriptionAdminClient()
-        .from("payment_records")
-        .update({
-          provider_session_id: session.id,
-          updated_at: new Date().toISOString(),
-        })
-        .eq("id", paymentId);
+      if (paymentId) {
+        await createSubscriptionAdminClient()
+          .from("payment_records")
+          .update({
+            provider_session_id: session.id,
+            updated_at: new Date().toISOString(),
+          })
+          .eq("id", paymentId);
+      }
 
       destination = session.url;
       return;
     }
 
+    if (provider.startsWith("airwallex_")) {
+      if (!paymentId) {
+        destination = subscriptionUrl({ error: "payment_record_failed" });
+        return;
+      }
+
+      const method = provider.replace("airwallex_", "");
+      await createSubscriptionAdminClient()
+        .from("payment_records")
+        .update({
+          metadata: {
+            ...metadata,
+            airwallex: {
+              requested_method: method,
+            },
+          },
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", paymentId);
+
+      destination = `/payments/checkout?paymentId=${encodeURIComponent(paymentId)}&method=${encodeURIComponent(method)}`;
+      return;
+    }
+
     if (provider === "wechat_pay") {
+      if (!paymentId) {
+        destination = subscriptionUrl({ error: "payment_record_failed" });
+        return;
+      }
+
       const outTradeNo = shortTradeNo();
       const notifyUrl = new URL("/api/payments/wechat/notify", appBaseUrl).toString();
       const nativeOrder = await createNativeOrder({
@@ -260,7 +326,7 @@ export async function startCommercialCheckout(formData: FormData): Promise<void>
     const returnUrl = new URL("/client/subscription", appBaseUrl);
     returnUrl.searchParams.set("payment", "return");
     returnUrl.searchParams.set("provider", "alipay");
-    returnUrl.searchParams.set("paymentId", paymentId);
+    if (paymentId) returnUrl.searchParams.set("paymentId", paymentId);
 
     const alipayUrl = createAlipayPagePayUrl({
       outTradeNo,
@@ -270,19 +336,21 @@ export async function startCommercialCheckout(formData: FormData): Promise<void>
       returnUrl: returnUrl.toString(),
     });
 
-    await createSubscriptionAdminClient()
-      .from("payment_records")
-      .update({
-        provider_session_id: outTradeNo,
-        metadata: {
-          ...metadata,
-          alipay: {
-            out_trade_no: outTradeNo,
+    if (paymentId) {
+      await createSubscriptionAdminClient()
+        .from("payment_records")
+        .update({
+          provider_session_id: outTradeNo,
+          metadata: {
+            ...metadata,
+            alipay: {
+              out_trade_no: outTradeNo,
+            },
           },
-        },
-        updated_at: new Date().toISOString(),
-      })
-      .eq("id", paymentId);
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", paymentId);
+    }
 
     destination = alipayUrl;
   } catch (error) {

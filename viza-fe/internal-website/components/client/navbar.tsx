@@ -3,16 +3,32 @@
 import Link from "next/link";
 import Image from "next/image";
 import { MotionConfig, motion } from "motion/react";
-import { useRouter } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { MessageCircle, Plane } from "lucide-react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { AnimatedMenu } from "@/components/client/animated-menu";
 import { LanguageSelector } from "@/components/client/language-selector";
 import { AnimatedTabPill } from "@/components/ui/animated-tab-pill";
-import { useTranslations } from "next-intl";
-import { useEffect, useState } from "react";
+import { useLocale, useTranslations } from "next-intl";
+import { useEffect, useMemo, useState } from "react";
 import { svgPaths } from "@/components/client/constants";
 import { cn } from "@/lib/utils";
+import {
+  getApplicationLifecycleSummaries,
+  type ApplicationLifecycleSummary,
+} from "@/app/actions/application-lifecycle";
+import {
+  getFormVisaType,
+  getVisaPackageTitle,
+} from "@/lib/visa-destinations";
+import {
+  buildApplicationFormHref,
+  getRecentApplicationFormHref,
+  readApplicationFormTarget,
+  RECENT_APPLICATION_FORM_EVENT,
+  RECENT_APPLICATION_FORM_STORAGE_KEY,
+  type ApplicationFormTarget,
+} from "@/lib/client/recent-application-form";
 
 interface NavBarProps {
   activeTab: string | null;
@@ -47,6 +63,26 @@ const chatAgentOptions = [
   },
 ] as const;
 
+function hasApplicationIdentity(target: ApplicationFormTarget | null): target is ApplicationFormTarget {
+  return Boolean(target?.applicationId || (target?.country && target?.visaType));
+}
+
+function matchesApplicationTarget(
+  summary: ApplicationLifecycleSummary,
+  target: ApplicationFormTarget,
+): boolean {
+  if (target.applicationId) {
+    return summary.applicationId === target.applicationId;
+  }
+
+  if (!target.country || !target.visaType) return false;
+
+  return (
+    summary.country.toLowerCase() === target.country.toLowerCase() &&
+    summary.visaType.toLowerCase() === getFormVisaType(target.visaType).toLowerCase()
+  );
+}
+
 export function NavBar({
   activeTab,
   setActiveTab,
@@ -55,12 +91,17 @@ export function NavBar({
   menuReady,
 }: NavBarProps) {
   const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+  const locale = useLocale();
   const t = useTranslations("nav");
   const [navColor, setNavColor] = useState<string>("#000000");
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [chatMenuOpen, setChatMenuOpen] = useState(false);
   const [mobileChatMenuOpen, setMobileChatMenuOpen] = useState(false);
   const [hasMounted, setHasMounted] = useState(false);
+  const [applicationSummaries, setApplicationSummaries] = useState<ApplicationLifecycleSummary[]>([]);
+  const [recentApplicationHref, setRecentApplicationHref] = useState<string | null>(null);
   const transitionDuration = 0.6;
 
   const tabLabels: Record<string, string> = {
@@ -76,6 +117,44 @@ export function NavBar({
   useEffect(() => {
     setHasMounted(true);
   }, []);
+
+  useEffect(() => {
+    const syncRecentApplicationHref = () => {
+      setRecentApplicationHref(getRecentApplicationFormHref());
+    };
+    const handleStorage = (event: StorageEvent) => {
+      if (event.key === RECENT_APPLICATION_FORM_STORAGE_KEY) {
+        syncRecentApplicationHref();
+      }
+    };
+
+    syncRecentApplicationHref();
+
+    window.addEventListener(RECENT_APPLICATION_FORM_EVENT, syncRecentApplicationHref);
+    window.addEventListener("storage", handleStorage);
+
+    return () => {
+      window.removeEventListener(RECENT_APPLICATION_FORM_EVENT, syncRecentApplicationHref);
+      window.removeEventListener("storage", handleStorage);
+    };
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadApplicationSummaries() {
+      const result = await getApplicationLifecycleSummaries();
+      if (!cancelled) {
+        setApplicationSummaries(result.summaries);
+      }
+    }
+
+    loadApplicationSummaries();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [pathname, searchParams]);
 
   useEffect(() => {
     const readCssVar = (name: string, fallback: string) => {
@@ -116,11 +195,59 @@ export function NavBar({
   const rightTabs = ["Settings", "Support"];
   const mobileTabs = ["Home", "Application", "Status", "Settings", "Support"];
 
+  const currentApplicationTarget = useMemo(() => {
+    const currentFormTarget = readApplicationFormTarget(
+      buildApplicationFormHref(pathname, searchParams.toString()),
+    );
+    if (hasApplicationIdentity(currentFormTarget)) return currentFormTarget;
+
+    const applicationPageTarget = readApplicationFormTarget(
+      `/client/application/long-form?${searchParams.toString()}`,
+    );
+    if (pathname.startsWith("/client/application") && hasApplicationIdentity(applicationPageTarget)) {
+      return applicationPageTarget;
+    }
+
+    const recentTarget = readApplicationFormTarget(recentApplicationHref);
+    return hasApplicationIdentity(recentTarget) ? recentTarget : null;
+  }, [pathname, recentApplicationHref, searchParams]);
+
+  const currentApplication = useMemo(() => {
+    if (currentApplicationTarget) {
+      return applicationSummaries.find((summary) =>
+        matchesApplicationTarget(summary, currentApplicationTarget)
+      ) ?? null;
+    }
+
+    return applicationSummaries[0] ?? null;
+  }, [applicationSummaries, currentApplicationTarget]);
+
+  const applicationMenuName = currentApplication
+    ? locale.toLowerCase().startsWith("zh")
+      ? `${currentApplication.countryNameZh || currentApplication.countryName}${currentApplication.visaTypeLabelZh || currentApplication.visaTypeLabel}`
+      : `${currentApplication.countryName} ${currentApplication.visaTypeLabel}`
+    : currentApplicationTarget?.country && currentApplicationTarget.visaType
+      ? getVisaPackageTitle(
+          currentApplicationTarget.country,
+          getFormVisaType(currentApplicationTarget.visaType),
+          locale,
+        )
+    : null;
+  const applicationMenuLabel = applicationMenuName ? `${t("application")}(${applicationMenuName})` : t("application");
+  const applicationMenuHref = currentApplicationTarget?.href ?? (currentApplication
+    ? `/client/application?country=${encodeURIComponent(currentApplication.country)}&visaType=${encodeURIComponent(currentApplication.visaType)}`
+    : "/client/application");
+
   const activeTabColor = isDark ? "#FFFFFF" : "#03346E";
   const inactiveColor = isDark ? "rgba(255,255,255,0.5)" : "rgba(0,0,0,0.5)";
 
   const handleTabChange = (tab: string) => {
     setActiveTab(tab);
+    if (tab === "Application") {
+      router.push(applicationMenuHref);
+      return;
+    }
+
     const path = tabPaths[tab];
     if (path) router.push(path);
   };
@@ -251,7 +378,13 @@ export function NavBar({
                   </motion.button>
                 </PopoverTrigger>
                 <PopoverContent align="start" className="w-auto p-0 border-0 bg-transparent shadow-none">
-                  <AnimatedMenu onLogout={onLogout} isLoggingOut={isLoggingOut} showInviteFriends />
+                  <AnimatedMenu
+                    applicationHref={applicationMenuHref}
+                    applicationLabel={applicationMenuLabel}
+                    onLogout={onLogout}
+                    isLoggingOut={isLoggingOut}
+                    showInviteFriends
+                  />
                 </PopoverContent>
               </Popover>
             ) : (
@@ -331,7 +464,14 @@ export function NavBar({
                   </motion.button>
                 </PopoverTrigger>
                 <PopoverContent align="end" className="w-auto p-0 border-0 bg-transparent shadow-none">
-                  <AnimatedMenu onLogout={onLogout} isLoggingOut={isLoggingOut} showInviteFriends onClose={() => setMobileMenuOpen(false)} />
+                  <AnimatedMenu
+                    applicationHref={applicationMenuHref}
+                    applicationLabel={applicationMenuLabel}
+                    onLogout={onLogout}
+                    isLoggingOut={isLoggingOut}
+                    showInviteFriends
+                    onClose={() => setMobileMenuOpen(false)}
+                  />
                 </PopoverContent>
               </Popover>
             ) : (

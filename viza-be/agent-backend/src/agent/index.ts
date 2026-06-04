@@ -1,10 +1,11 @@
-import Anthropic from "@anthropic-ai/sdk";
+import OpenAI from "openai";
 import { Logger } from "../utils/logger.js";
 import { getSupabaseClient } from "../db/supabase-client.js";
 
 const logger = new Logger({ serviceName: "VisaAgent" });
 
-const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY;
+const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
+const OPENAI_CHAT_MODEL = process.env.OPENAI_CHAT_MODEL || process.env.OPENAI_MODEL || "gpt-4o-mini";
 
 export const BASE_SYSTEM_PROMPT = `You are VIZA, a friendly and knowledgeable AI assistant that helps people understand and prepare visa applications for supported destinations. You are not limited to Indonesia.
 
@@ -18,6 +19,7 @@ Your capabilities:
 
 Guidelines:
 - Be concise and helpful. Use short paragraphs.
+- When the user greets you or sends a very short opener, introduce yourself as VIZA, say you help with visa applications, and ask for destination, nationality/passport, purpose, and stay length.
 - Before recommending a route, identify or ask for the destination country, the traveller's nationality, trip purpose, and intended stay length.
 - Do not default to Indonesia, the United States, the UK, Schengen, or any other destination unless the user or application context clearly indicates it.
 - Do not force a tourist/visitor visa if the user's purpose is work, study, family migration, or long-term residence. Explain the current knowledge scope and ask clarifying questions when needed.
@@ -31,9 +33,24 @@ Guidelines:
 - Never fabricate visa requirements or official policies.
 - When retrieved knowledge includes source titles or URLs, cite the relevant source title or URL for key policy claims.
 - If retrieved knowledge is missing for a policy detail, say that the detail is not confirmed in the current knowledge base and recommend checking the official source.
+- If the dynamic prompt or conversation interpretation says a destination is not currently supported by VIZA application forms, that service boundary overrides all general visa guidance. Clearly say VIZA has not opened that country's application service yet, do not give a VIZA application link, and suggest checking official sources for general information.
 - Be encouraging but honest about potential issues.
-- Do not use Markdown formatting in user-facing responses. Do not use Markdown headings, tables, bold or italic markers, bullet markers, horizontal rules, code fences, raw JSON, or raw XML unless the user explicitly asks for them.
-- Use plain text only. For lists, use short plain numbered lines such as "1. ..." without Markdown decoration.
+- If a destination country is known, the first sentence must include that destination country before asking follow-up questions or giving requirements.
+- When you ask follow-up questions, first anchor the answer in the known destination, purpose, or risk in one short sentence. Example: "For a South Korea airport transit, I need to confirm..." Do not ask generic questions that ignore known context.
+- When structured conversation state includes residence/apply-from, nationality, stay length, or trip purpose, reflect the relevant known facts briefly when they affect the answer. If residence/apply-from is known and the user asks whether they need a visa, where/how to apply, required documents, fees, processing time, eligibility, or appointment/biometrics, include the residence/apply-from at least once even when the main rule depends on nationality. If only one slot is missing, say what is already known before asking for the missing slot.
+- Never help users forge, falsify, invent, hide, or misrepresent documents, employment, funds, hotel bookings, travel history, refusal history, or any visa fact. Briefly refuse and suggest lawful alternatives such as truthful explanations, real cancellable bookings, sponsor evidence, or stronger supporting documents.
+- You may draft legal, truthful, editable explanation letters, travel plans, cover letters, or invitation-letter templates, but the content must be based on real facts supplied by the user.
+- Do not guarantee approval, promise an "easy" visa, or give an exact pass-rate percentage. You may give a qualitative risk assessment and practical ways to strengthen the application.
+- Do not repeat passport numbers, bank account numbers, or other sensitive identifiers back to the user. If a user shares sensitive data or files, remind them to redact unnecessary personal details and discuss only the relevant visa-risk pattern.
+- For urgent or relative travel dates, explain timing risk and ask for the exact date when needed. Recommend checking the official processing time and considering appointment availability, priority service where legitimate, or changing travel plans.
+- Distinguish visa validity, permitted stay duration, number of entries, and immigration officer discretion at entry.
+- For transit questions, ask for nationality, destination after transit, whether the traveller leaves the airport/clears immigration, ticket connection, and airport/country rules before giving a conclusion.
+- For transit questions with a known transit country, the first sentence must include that transit country name. Example: "关于韩国转机，我需要确认..."
+- For tourism or visitor status questions, warn that local employment is usually not allowed and remote work rules vary by destination; do not assume remote work is permitted.
+- For the traveller's own citizenship country, answer at a high level that citizens normally do not need a visa to enter their own country with a valid passport or travel document, and do not offer a VIZA application link.
+- Do not use Markdown formatting in user-facing responses. Do not use Markdown headings, tables, bold or italic markers, bullet markers, horizontal rules, code fences, Markdown links, raw JSON, or raw XML unless the user explicitly asks for them.
+- Use plain text only. Never output "**text**", "*text*", "- item", "* item", "[label](url)", markdown tables, or code fences. For lists, use short plain numbered lines such as "1. ..." without Markdown decoration. If you include a URL, write the plain URL directly.
+- Before sending a response, self-check that the text contains no Markdown markers and no bullet markers. Rewrite it into plain text if needed.
 - Respond primarily in the selected interface language provided in the dynamic prompt, not merely the language of the user's latest message.
 - Do not collect application form fields inside VIZA chat. Do not ask the user to fill dates, selections, uploads, passport fields, or detailed application fields in chat once the visa route is clear.
 - When the user wants to apply, give a rough idea first: likely visa route, key requirements, approximate processing time or uncertainty, fee/timing caveats when known, and official/source caveats. Then tell them to continue on the dedicated application form page.
@@ -195,7 +212,7 @@ export function buildSystemPrompt(
     sections.push(
       "\nStructured conversation state:\n" +
         conversationStateContext.trim() +
-        "\n\nUse this state as the source of truth for already-collected slots. Ask only for missing or ambiguous slots; do not restart the intake."
+        "\n\nUse this state as the source of truth for already-collected slots. Ask only for missing or ambiguous slots; do not restart the intake. If Residence/apply-from is not unknown and the answer concerns visa need, process, documents, timing, fees, eligibility, appointment, biometrics, or form handoff, mention the residence/apply-from once in the answer. In that case, start from the known situation, for example: based on the stated passport, residence/apply-from, destination, purpose, and stay length."
     );
   }
 
@@ -207,7 +224,39 @@ export function buildSystemPrompt(
     );
   }
 
+  if (/service boundary|not currently supported|not opened/i.test(conversationInterpretation ?? "")) {
+    sections.push(
+      "\nCritical service boundary override:\nThe latest request includes a destination that VIZA has not opened for application service. The first sentence must clearly say this country is not currently opened/supported by VIZA. Do not ask normal intake questions for that country. Do not provide a VIZA application link for that country."
+    );
+  }
+
+  sections.push(
+    "\nMandatory known-facts rule:\nWhen the structured conversation state lists known values for destination, nationality/passport, Residence/apply-from, trip purpose, or stay length, include those exact known values in the answer before the main conclusion whenever the user asks about visa need, route, requirements, timing, fees, eligibility, or form handoff. For example: \"基于你持中国护照、从新加坡申请、去日本旅游 7 天...\".",
+    "\nFinal response format hard rule:\nReturn plain text only. Do not use Markdown. Do not output bold markers, italic markers, bullet markers, Markdown links, Markdown tables, code fences, raw JSON, or raw XML. If you need a list, use plain numbered sentences like \"1. Text\" and never wrap labels with **."
+  );
+
   return sections.join("\n");
+}
+
+export function sanitizeAgentPlainText(text: string): string {
+  return text
+    .replace(/```[a-zA-Z0-9_-]*\n?/g, "")
+    .replace(/```/g, "")
+    .replace(/\[([^\]]+)\]\(([^)]+)\)/g, "$1 $2")
+    .replace(/\*\*([^*]+)\*\*/g, "$1")
+    .replace(/__([^_]+)__/g, "$1")
+    .replace(/\*([^*\n]+)\*/g, "$1")
+    .replace(/_([^_\n]+)_/g, "$1")
+    .replace(/^\s{0,3}#{1,6}\s+/gm, "")
+    .replace(/^\s*[-*]\s+/gm, "")
+    .replace(/^\s*\|(.+)\|\s*$/gm, (_match, row: string) =>
+      row
+        .split("|")
+        .map((cell) => cell.trim())
+        .filter(Boolean)
+        .join("  ")
+    )
+    .trim();
 }
 
 // =============================================================================
@@ -262,8 +311,8 @@ export async function streamChat(
   systemPrompt?: string
 ): Promise<void> {
   if (
-    !ANTHROPIC_API_KEY ||
-    ANTHROPIC_API_KEY === "your_anthropic_api_key_here"
+    !OPENAI_API_KEY ||
+    OPENAI_API_KEY === "your_openai_api_key_here"
   ) {
     const fallback =
       "I'm sorry, the AI service is not configured yet. Please contact support.";
@@ -272,27 +321,30 @@ export async function streamChat(
     return;
   }
 
-  const client = new Anthropic({ apiKey: ANTHROPIC_API_KEY });
+  const client = new OpenAI({ apiKey: OPENAI_API_KEY });
 
   try {
-    const stream = await client.messages.stream({
-      model: "claude-sonnet-4-6",
+    const stream = await client.chat.completions.create({
+      model: OPENAI_CHAT_MODEL,
       max_tokens: 1024,
-      system: systemPrompt ?? BASE_SYSTEM_PROMPT,
-      messages,
+      stream: true,
+      messages: [
+        { role: "system", content: systemPrompt ?? BASE_SYSTEM_PROMPT },
+        ...messages,
+      ],
     });
 
     let fullResponse = "";
     const toolsUsed: string[] = [];
 
-    stream.on("text", (text) => {
+    for await (const chunk of stream) {
+      const text = chunk.choices[0]?.delta?.content ?? "";
+      if (!text) continue;
       fullResponse += text;
-      callbacks.onToken(text);
-    });
+      callbacks.onToken(sanitizeAgentPlainText(text));
+    }
 
-    await stream.finalMessage();
-
-    await callbacks.onComplete(fullResponse, toolsUsed);
+    await callbacks.onComplete(sanitizeAgentPlainText(fullResponse), toolsUsed);
   } catch (err) {
     logger.error("Streaming error", err as Error);
     callbacks.onError(err as Error);

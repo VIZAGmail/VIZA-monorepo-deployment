@@ -29,8 +29,8 @@
   },
   "session": {
     "invalidatedTitle": "会话已失效",
-    "invalidatedBody": "另一个患者视图已在其他标签页中打开。出于安全原因，此会话已被终止。",
-    "invalidatedHint": "请关闭此标签页并使用新的患者视图标签页。"
+    "invalidatedBody": "另一个申请人视图已在其他标签页中打开。出于安全原因，此会话已停止显示。",
+    "invalidatedHint": "请关闭此标签页并使用新的申请人视图标签页。"
   },
   "home": {
     "welcomeBack": "欢迎回来，{name}。",
@@ -1254,17 +1254,35 @@
       "scanOption": "扫描护照",
       "scanOptionHint": "通过照片自动填充您的信息",
       "scanComingSoon": "即将推出 — 请先手动输入",
+      "scanStepEyebrow": "第 1 步 / 共 3 步",
       "scanUploadTitle": "上传您的护照",
+      "scanAutoReadSubtitle": "我们会自动读取您的护照信息，无需手动输入。请使用带照片的资料页。",
       "scanInstructions": "请将护照资料页平整放置,光线充足。我们需要清晰读取照片、机读区和所有印刷文字。",
+      "scanUploadFile": "上传文件",
       "scanBrowse": "选择文件",
-      "scanBrowseHint": "JPG、PNG 或 WEBP — 最大 8 MB",
+      "scanBrowseHint": "JPG、PNG、WEBP 或 PDF — 最大 10 MB",
       "scanTakePhoto": "拍照",
       "scanTakePhotoHint": "使用您的相机(手机)",
+      "scanDropTitle": "将护照照片拖到这里",
+      "scanDropSubtitle": "或点击选择文件 — 文件会加密传输，不会被分享",
+      "scanFormatsLimit": "最大 10 MB",
+      "scanReadingDocument": "正在读取文件",
+      "scanExtractingDetails": "正在提取您的信息",
+      "scanVerifyingAuthenticity": "正在验证真实性",
       "scanExtracting": "正在读取您的护照…",
       "scanExtractError": "无法识别此照片。请重新拍摄清晰照片或手动输入。",
+      "scanPreviewAlt": "护照预览",
+      "scanTipCornersTitle": "四个角都清晰可见",
+      "scanTipCornersBody": "请完整拍入资料页，包括底部机读区。",
+      "scanTipLightTitle": "光线明亮均匀",
+      "scanTipLightBody": "避免手或手机壳造成阴影。",
+      "scanTipGlareTitle": "避免反光",
+      "scanTipGlareBody": "如果防伪膜反光，请稍微调整拍摄角度。",
       "scanResultTitle": "确认识别结果",
       "scanResultSubtitle": "如有不正确的字段,请在继续前修改。",
       "scanUseDetails": "使用这些信息",
+      "scanSaving": "正在保存",
+      "scanUploadedSuccess": "护照页已上传成功，并已保存到材料记录。",
       "scanRetry": "重新拍摄",
       "scanFallbackManual": "改为手动输入",
       "scanPrivacyNote": "扫描件经加密传输,仅用于识别,提交后即删除。",
@@ -3528,13 +3546,26 @@
   },
   "inviteFriends": {
     "heroTitle": "邀请您的朋友",
-    "heroSubtitle": "赚取奖励",
-    "referHeading": "推荐朋友赚取 ₱9,999",
-    "referDescription": "与朋友和家人分享您的专属推荐链接。当他们注册后，你们各自将获得 ₱9,999 可在VIZA服务中使用。",
-    "referralLink": "推荐链接",
-    "loadingLink": "正在加载您的链接...",
-    "copyLink": "复制链接",
+    "heroSubtitle": "赚取 VIZA 积分",
+    "referHeading": "分享 referral code，赚取 99 积分",
+    "referDescription": "把您的专属 referral code 分享给朋友和家人。新用户注册时使用该 code 后，你们两人各获得 99 VIZA 积分。",
+    "referralCode": "Referral code",
+    "loadingLink": "正在加载您的 code...",
+    "copyCode": "复制 code",
     "copied": "已复制！",
+    "codeCopiedToast": "Referral code 已复制。",
+    "inviteSentToast": "邀请已发送至 {email}。",
+    "inviteFailedToast": "发送邀请失败。",
+    "rewardForYouLabel": "您获得",
+    "rewardForFriendLabel": "朋友获得",
+    "pointsAmount": "99 积分",
+    "errors": {
+      "not_authenticated": "请重新登录后再发送邀请。",
+      "invalid_email": "请输入有效的电子邮件地址。",
+      "missing_referral_code": "您的 referral code 还在加载，请稍后再试。",
+      "email_not_configured": "邮件发送还没有配置，请在本地环境中添加 RESEND_API_KEY。",
+      "send_failed": "暂时无法发送邀请，请稍后重试。"
+    },
     "orInviteViaEmail": "或通过电子邮件邀请",
     "emailPlaceholder": "您朋友的电子邮件",
     "sendInvite": "发送邀请",
@@ -3542,20 +3573,20 @@
     "howItWorks": "如何运作",
     "steps": {
       "share": {
-        "title": "分享您的专属链接",
-        "description": "使用您的专属推荐链接邀请朋友加入VIZA"
+        "title": "分享您的 referral code",
+        "description": "邀请朋友使用您的专属 code 加入 VIZA。"
       },
       "give": {
-        "title": "赠送朋友 ₱9,999",
-        "description": "当您的朋友加入VIZA时，他们将获得 ₱9,999 在VIZA服务中使用"
+        "title": "赠送朋友 99 积分",
+        "description": "新用户注册时填写您的 code，即可获得 99 积分。"
       },
       "earn": {
-        "title": "赚取 ₱9,999 积分",
-        "description": "您的每位朋友使用您的链接注册，您也将获得 ₱9,999。"
+        "title": "赚取 99 积分",
+        "description": "每位新用户使用您的 code 注册后，您也将获得 99 积分。"
       },
       "redeem": {
-        "title": "兑换您的积分",
-        "description": "在VIZA服务页面使用您的积分。"
+        "title": "兑换积分奖励",
+        "description": "在设置里的积分中心使用积分商城兑换奖励。"
       }
     },
     "faqTitle": "常见问题",
@@ -3567,11 +3598,11 @@
     "faqs": {
       "whenReward": {
         "question": "我什么时候能获得奖励？",
-        "answer": "您的奖励将在您的朋友完成首次购买后24小时内计入您的账户。"
+        "answer": "新用户成功使用您的 referral code 注册后，99 积分会计入您的账户。"
       },
       "howUseCredit": {
         "question": "如何使用积分？",
-        "answer": "积分可在购买VIZA服务页面的任何服务时在结账时使用。"
+        "answer": "打开设置里的积分中心，即可在积分商城兑换可用奖励。"
       },
       "whoEligible": {
         "question": "谁有资格？",
@@ -3600,6 +3631,33 @@
       "payment": "付款",
       "notSet": "未设置"
     },
+    "pointsCenter": {
+      "eyebrow": "积分中心",
+      "title": "VIZA 积分",
+      "totalLabel": "当前积分总额",
+      "referralRule": "新用户注册时使用您的 referral code 后，两边账号各获得 99 积分。",
+      "lifetimeEarned": "累计获得",
+      "lifetimeSpent": "累计使用",
+      "marketplaceTitle": "积分商城",
+      "marketplaceDescription": "使用积分兑换 VIZA 奖励；余额足够时即可兑换。",
+      "cost": "{points} 积分",
+      "redeem": "兑换",
+      "notEnough": "积分不足",
+      "rewards": {
+        "applicationReview": {
+          "title": "申请审核券",
+          "description": "用于抵扣一次递交前的 VIZA 申请审核服务。"
+        },
+        "priorityChecklist": {
+          "title": "优先材料清单整理",
+          "description": "为下一次申请加速材料清单核对。"
+        },
+        "consultationCredit": {
+          "title": "顾问咨询抵扣",
+          "description": "兑换人工签证顾问咨询的费用抵扣。"
+        }
+      }
+    },
     "sections": {
       "general": "通用",
       "payments": "付款",
@@ -3620,15 +3678,20 @@
         "description": "添加家人、同事或同行人资料，后续团单可直接选择。",
         "badge": "团单"
       },
+      "pointsCenter": {
+        "title": "积分中心",
+        "description": "查看 VIZA 积分总额，并在积分商城兑换奖励。",
+        "badge": "奖励"
+      },
       "language": {
         "title": "语言",
         "description": "可通过顶部语言切换器切换界面语言，也可查看资料填写指南。"
       },
-      "paymentMethods": {
-        "title": "付款方式设置",
-        "description": "了解如何添加或更新银行卡、银行转账或微信支付安排。",
-        "badge": "指南"
-      },
+    "paymentMethods": {
+      "title": "付款方式设置",
+      "description": "管理银行卡、微信和支付宝，并设置每类支付的优先账号。",
+      "badge": "管理"
+    },
       "billing": {
         "title": "回执与发票",
         "description": "查看付款历史、回执、发票申请和退款状态。"
@@ -3642,24 +3705,104 @@
         "description": "如需人工跟进，可提交客服请求。"
       }
     },
-    "payment": {
-      "selected": "默认",
-      "setDefault": "设为默认",
-      "methods": {
-        "card": {
-          "title": "银行卡",
-          "description": "适合线上结账和回执追踪。"
-        },
-        "bank_transfer": {
-          "title": "银行转账",
-          "description": "大额或复杂订单可由客服协助安排。"
-        },
-        "wechat_pay": {
-          "title": "微信支付",
-          "description": "当套餐支持时，可使用中文支付流程。"
-        }
+  "payment": {
+    "selected": "默认",
+    "pendingVerification": "待验证",
+    "setDefault": "设为默认",
+    "manage": "管理账号",
+    "manageSelected": "正在管理",
+    "managerHint": "可为此付款方式绑定多个账号，并选择优先使用的默认账号。",
+    "managerHints": {
+      "bank_card": "银行卡需要通过 Stripe 托管验证后才能用于后续付款选择。",
+      "wechat_pay": "微信支付通过扫码完成绑定，不再手动输入微信账号或手机号。",
+      "alipay": "支付宝通过扫码完成绑定，不再手动输入支付宝账号或手机号。"
+    },
+    "boundCount": "已绑定 {count} 个",
+    "defaultAccount": "默认：{account}",
+    "empty": "还没有绑定账号。添加后可以在这里编辑、删除或设为默认。",
+    "addTitle": "添加付款账号",
+    "cardAddTitle": "添加银行卡",
+    "qrAddTitle": "扫码绑定账号",
+    "editTitle": "编辑付款账号",
+    "addAccount": "添加账号",
+    "verifyWithStripe": "通过 Stripe 验证",
+    "generateQr": "生成绑定二维码",
+    "regenerateQr": "重新生成二维码",
+    "checkQrStatus": "检查绑定状态",
+    "saveEdit": "保存修改",
+    "cancelEdit": "取消编辑",
+    "edit": "编辑",
+    "delete": "删除",
+    "safeHint": "这里只保存付款账号的备注和识别信息，请不要输入完整银行卡号、验证码或密码。",
+    "stripeHint": "卡号和 CVV 仅用于启动 Stripe 托管验证；VIZA 不会保存完整卡号或 CVV。",
+    "cardIdentifier": "尾号 {last4} · Stripe 验证中",
+    "qrAlt": "付款账号绑定二维码",
+    "qrEmpty": "点击生成二维码后，使用对应 App 扫码完成账号绑定。",
+    "qrExpires": "二维码有效期至 {time}。",
+    "qrHint": {
+      "wechat_pay": "请使用微信扫一扫完成账号授权绑定，绑定完成后返回这里检查状态。",
+      "alipay": "请使用支付宝扫一扫完成账号授权绑定，绑定完成后返回这里检查状态。"
+    },
+    "fields": {
+      "label": "账号名称",
+      "identifier": "识别信息",
+      "nickname": "昵称",
+      "cardNumber": "卡号",
+      "cvv": "CVV"
+    },
+    "placeholders": {
+      "bank_card": {
+        "label": "例如：招商银行储蓄卡",
+        "identifier": "例如：尾号 5857",
+        "nickname": "例如：招商银行储蓄卡",
+        "cardNumber": "请输入银行卡号",
+        "cvv": "卡背面 3 或 4 位安全码"
+      },
+      "wechat_pay": {
+        "label": "例如：我的微信",
+        "identifier": "例如：微信昵称或手机号后四位"
+      },
+      "alipay": {
+        "label": "例如：我的支付宝",
+        "identifier": "例如：支付宝账号备注"
       }
     },
+    "messages": {
+      "required": "请填写账号名称和识别信息。",
+      "nicknameRequired": "请填写银行卡昵称。",
+      "cardNumberInvalid": "请输入有效的银行卡号。",
+      "cvvInvalid": "请输入有效的 CVV。",
+      "added": "付款账号已添加。",
+      "updated": "付款账号已更新。",
+      "deleted": "付款账号已删除。",
+      "defaultUpdated": "默认付款账号已更新。",
+      "stripeUnavailable": "Stripe 尚未配置，暂时无法验证银行卡。",
+      "stripeStartFailed": "暂时无法启动 Stripe 验证，请稍后重试。",
+      "stripeRedirect": "正在打开 Stripe 托管验证页面。",
+      "stripeReturned": "Stripe 验证已返回，绑定状态会在支付服务确认后更新。",
+      "stripeCancelled": "Stripe 验证已取消，银行卡尚未完成绑定。",
+      "qrStartFailed": "暂时无法生成绑定二维码，请稍后重试。",
+      "qrReady": "二维码已生成，请使用对应 App 扫码。",
+      "qrStatusFailed": "暂时无法检查绑定状态，请稍后重试。",
+      "qrExpired": "二维码已过期，请重新生成。",
+      "qrPending": "还没有收到扫码绑定结果，请扫码后再检查。",
+      "qrBound": "扫码绑定已完成。"
+    },
+    "methods": {
+      "bank_card": {
+        "title": "银行卡",
+        "description": "填写卡号、CVV 和昵称后，通过 Stripe 验证绑定。"
+      },
+      "wechat_pay": {
+        "title": "微信支付",
+        "description": "通过微信扫码授权绑定账号。"
+      },
+      "alipay": {
+        "title": "支付宝",
+        "description": "通过支付宝扫码授权绑定账号。"
+      }
+    }
+  },
     "travelers": {
       "title": "常用出行人",
       "description": "保存经常一起出行的申请人资料。这里的资料不会自动提交，只是为后续团单选择做准备。",
@@ -3717,20 +3860,52 @@
       "failedToSave": "保存失败。",
       "saved": "已保存。"
     },
-    "security": {
-      "title": "安全设置",
-      "passwordTitle": "修改密码",
-      "description": "请使用未在其他网站重复使用的强密码。VIZA 官方客服不会索要您的密码。",
-      "newPassword": "新密码",
-      "confirmPassword": "确认密码",
-      "updatePassword": "更新密码",
-      "saving": "更新中...",
-      "updated": "密码已更新。",
-      "mismatch": "两次输入的密码不一致。",
-      "tooShort": "密码至少需要 8 个字符。",
-      "failed": "暂时无法更新密码，请重试。",
-      "guide": "安全指南"
+  "security": {
+    "title": "安全设置",
+    "passwordTitle": "修改密码",
+    "passwordDescription": "先验证当前邮箱验证码，验证后即可设置新密码。",
+    "emailTitle": "更改绑定邮箱",
+    "emailDescription": "通过当前邮箱验证码确认身份，保留原有密码。",
+    "guideDescription": "查看密码、邮箱和账号保护建议。",
+    "description": "请使用未在其他网站重复使用的强密码。VIZA 官方客服不会索要您的密码。",
+    "verifyDescription": "我们会向 {email} 发送 8 位验证码，验证后继续操作。",
+    "verificationCode": "邮箱验证码",
+    "codePlaceholder": "输入 8 位验证码",
+    "sendCode": "发送验证码",
+    "resendCode": "重新发送",
+    "verifyCode": "验证邮箱",
+    "verificationSent": "验证码已发送，请查看邮箱。",
+    "verificationSendFailed": "暂时无法发送验证码，请稍后重试。",
+    "codeInvalid": "请输入 8 位验证码。",
+    "codeFailed": "验证码无效或已过期，请重试。",
+    "verified": "邮箱验证已通过。",
+    "verifyFirst": "请先完成邮箱验证码验证。",
+    "newPassword": "新密码",
+    "confirmPassword": "确认密码",
+    "newEmail": "新绑定邮箱",
+    "newEmailPlaceholder": "name@example.com",
+    "updatePassword": "更新密码",
+    "updateEmail": "更新邮箱",
+    "saving": "更新中...",
+    "savingEmail": "更新中...",
+    "updated": "密码已更新。",
+    "emailUpdated": "绑定邮箱已更新，原密码保持不变。",
+    "mismatch": "两次输入的密码不一致。",
+    "tooShort": "密码至少需要 8 个字符。",
+    "requirementError": "密码必须包含字母、数字和特殊符号。",
+    "failed": "暂时无法更新密码，请重试。",
+    "emailMissing": "当前账号邮箱不可用，请重新登录后再试。",
+    "emailInvalid": "请输入有效的新邮箱地址。",
+    "emailSame": "新邮箱不能与当前邮箱相同。",
+    "emailUpdateFailed": "暂时无法更新邮箱，请重试。",
+    "passwordRequirements": {
+      "length": "至少 8 个字符",
+      "letter": "包含字母",
+      "digit": "包含数字",
+      "symbol": "包含特殊符号"
     },
+    "guide": "安全指南"
+  },
     "signOut": {
       "title": "退出登录",
       "description": "从此设备退出您的账户。",
@@ -3782,7 +3957,7 @@
       },
       "requests": {
         "title": "我的反馈",
-        "description": "查看已发送、处理中和已处理的问题。"
+        "description": "查看未解决、正在解决和已解决的问题。"
       }
     },
     "requests": {
@@ -3791,9 +3966,11 @@
       "empty": "还没有反馈记录。提交客服请求后会显示在这里。",
       "ticketMeta": "工单 #{id}",
       "status": {
-        "sent": "已发送",
-        "pending": "处理中",
-        "resolved": "已处理"
+        "unresolved": "未解决",
+        "inProgress": "正在解决",
+        "sent": "未解决",
+        "pending": "正在解决",
+        "resolved": "已解决"
       }
     },
     "requestsPage": {
@@ -3950,11 +4127,14 @@
       "showPassword": "显示密码",
       "hidePassword": "隐藏密码",
       "registeredSuccess": "您的账户已准备好。可以输入密码登录，或获取验证码登录。",
+      "resetSuccess": "密码已更新。请使用新密码登录。",
       "noAccountFound": "未找到与此电子邮件关联的账户。请联系客服。",
       "failedToSendCode": "发送验证码失败",
       "noAccountWithEmail": "未找到与此电子邮件关联的账户",
       "notRegistered": "此电子邮件未注册为申请人。",
       "authFailed": "认证失败。请重试。",
+      "invalidCredentials": "邮箱或密码不正确，请重新输入。",
+      "tooManyRequests": "尝试次数过多，请稍后再试。",
       "unexpectedError": "发生意外错误。请重试。",
       "failedToResend": "重新发送验证码失败。",
       "checkEmail": "查看您的邮箱",
@@ -3969,6 +4149,8 @@
       "title": "创建您的账户",
       "subtitle": "输入电子邮件，开始设置您的 VIZA 账户。",
       "emailPlaceholder": "输入您的电子邮件",
+      "referralCodePlaceholder": "Referral code（选填）",
+      "referralCodeHint": "新用户注册时填写 referral code，两边账号各获得 99 积分。",
       "invalidEmail": "请输入有效的电子邮件地址。",
       "submitting": "提交中...",
       "continueToPassword": "继续",
@@ -3983,6 +4165,8 @@
       "resendCode": "重新发送验证码",
       "otpDigitLabel": "验证码第 {digit} 位",
       "requestInvite": "申请邀请",
+      "acceptTos": "我同意",
+      "acceptPrivacy": "我同意",
       "acceptRequired": "请先同意服务条款和隐私政策。",
       "back": "返回",
       "setPasswordTitle": "设置您的密码",
@@ -4016,12 +4200,57 @@
       "privacyPolicy": "隐私政策",
       "termsOfService": "服务条款"
     },
+    "forgotPassword": {
+      "title": "重置您的密码",
+      "subtitle": "输入邮箱，我们会发送 8 位验证码来确认身份。",
+      "emailPlaceholder": "输入您的电子邮件",
+      "invalidEmail": "请输入有效的电子邮件地址。",
+      "sendCodeButton": "发送验证码",
+      "sendingCode": "正在发送验证码...",
+      "failedToSendCode": "发送验证码失败，请稍后重试。",
+      "failedToResend": "重新发送验证码失败。",
+      "authFailed": "验证码验证失败。请重新获取验证码后再试。",
+      "verifyEmailTitle": "验证您的邮箱",
+      "sentCodeTo": "我们已发送 8 位验证码到",
+      "resendIn": "{seconds}秒后重新发送",
+      "resendCode": "重新发送验证码",
+      "otpDigitLabel": "验证码第 {digit} 位",
+      "back": "返回",
+      "backToLogin": "返回登录",
+      "setPasswordTitle": "设置新密码",
+      "setPasswordSubtitle": "密码需要包含字母、数字和特殊符号。",
+      "passwordPlaceholder": "输入新密码",
+      "confirmPasswordPlaceholder": "再次输入新密码",
+      "passwordStrength": "密码安全等级",
+      "strength": {
+        "weak": "弱",
+        "fair": "一般",
+        "good": "良好",
+        "strong": "强"
+      },
+      "requirements": {
+        "length": "至少 8 个字符",
+        "letter": "包含字母",
+        "digit": "包含数字",
+        "symbol": "包含特殊符号"
+      },
+      "passwordRequirementError": "密码必须包含字母、数字和特殊符号。",
+      "passwordMismatch": "两次输入的密码不一致。",
+      "failedToUpdate": "更新密码失败，请重试。",
+      "updatingPassword": "正在更新密码...",
+      "updatePassword": "更新密码",
+      "showPassword": "显示密码",
+      "hidePassword": "隐藏密码",
+      "unexpectedError": "无法重置密码，请重试。",
+      "privacyPolicy": "隐私政策",
+      "termsOfService": "服务条款"
+    },
     "register": {
       "accountCreated": "账户已创建！",
       "accountCreatedMessage": "您的账户已成功创建。您现在可以登录开始使用VIZA。",
       "goToLogin": "前往登录",
       "validatingReferral": "正在验证推荐...",
-      "referredBy": "由 {name} 推荐——您将获得 ₱9,999 积分！",
+      "referredBy": "由 {name} 推荐——您将获得 99 积分！",
       "noReferralCode": "未找到推荐码。请使用有效的推荐链接注册。",
       "invalidReferralCode": "无效的推荐码。请检查您的链接并重试。",
       "createAccount": "创建您的账户",
@@ -4265,6 +4494,14 @@
       "groupTitle": "包含核心能力",
       "groupBody": "次付默认包含申请要求核对、动态材料清单、多语言辅助、AI assistance、团单和 Travel Agent。",
       "paymentNote": "次付目的地按首页相同的大区和表单入口归类，便于从订阅页直接进入对应服务。",
+      "searchPlaceholder": "搜索国家或签证表单",
+      "searchResults": "搜索结果",
+      "noResults": "没有找到匹配的国家或表单。",
+      "chooseRegion": "选择一个大区卡片进入独立页面，查看该大区下全部可次付的国家表单；也可以直接搜索国家。",
+      "collapse": "收起",
+      "expand": "展开",
+      "backToSubscription": "返回订阅方案",
+      "regionDetailEyebrow": "次付申请大区",
       "regionCountSuffix": "项",
       "feeNote": "所有价格均为每次申请的 VIZA 服务费，不包含官方签证费、签证中心费、生物信息采集费、快递费或加急费。",
       "countries": {

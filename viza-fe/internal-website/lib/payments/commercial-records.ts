@@ -1,8 +1,10 @@
 import "server-only";
 
 import Stripe from "stripe";
+import { isAirwallexConfigured } from "@/lib/airwallex/client";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { getAuthenticatedUser } from "@/lib/auth/get-authenticated-user";
+import { isAlipayConfigReady } from "@/lib/alipay/client";
+import { getCommercialAuthenticatedUser } from "@/lib/payments/commercial-session";
 
 type Json =
   | string
@@ -79,18 +81,18 @@ export function isWechatPayConfigured(): boolean {
 }
 
 export function isAlipayConfigured(): boolean {
-  return Boolean(
-    process.env.ALIPAY_APP_ID?.trim() &&
-      process.env.ALIPAY_PRIVATE_KEY?.trim() &&
-      process.env.ALIPAY_PUBLIC_KEY?.trim(),
-  );
+  return isAlipayConfigReady();
 }
 
 export function getPaymentProviderReadiness() {
+  const airwallex = isAirwallexConfigured();
   return {
     stripe: isStripeConfigured(),
     wechat_pay: isWechatPayConfigured(),
     alipay: isAlipayConfigured(),
+    airwallex_card: airwallex,
+    airwallex_wechat: airwallex,
+    airwallex_alipay: airwallex,
   };
 }
 
@@ -101,7 +103,7 @@ export function createStripeClient(): Stripe | null {
 }
 
 export async function getPaymentRecordForCurrentUser(paymentId: string): Promise<PaymentRecordRow | null> {
-  const user = await getAuthenticatedUser();
+  const user = await getCommercialAuthenticatedUser();
   if (!user) return null;
 
   const { data, error } = await createSubscriptionAdminClient()
@@ -123,7 +125,7 @@ export async function reconcileStripeSubscriptionReturn(
 ): Promise<SubscriptionReturnState> {
   if (!paymentId || !sessionId) return null;
 
-  const user = await getAuthenticatedUser();
+  const user = await getCommercialAuthenticatedUser();
   if (!user) {
     return {
       tone: "error",

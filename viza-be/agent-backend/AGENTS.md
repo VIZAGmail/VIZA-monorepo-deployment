@@ -9,6 +9,11 @@ routes, Socket.IO streaming chat, RAG retrieval, field guidance, application
 translation/validation, Supabase service-role access, Drizzle migrations, and
 form/RAG seed scripts.
 
+OpenAI is the backend AI provider for chat generation, field guidance,
+application semantic validation, passport OCR, and embeddings. Keep
+`OPENAI_API_KEY` as the single model-provider key unless a future task
+explicitly reintroduces another provider.
+
 ## Key Flows
 
 - Startup: `src/index.ts` loads `.env`, creates HTTP server, attaches Socket.IO,
@@ -26,6 +31,7 @@ form/RAG seed scripts.
   `drizzle/0013_internal_automation_loop.sql`.
 - DB schema and migrations: `src/db/schema.ts` and `drizzle/*.sql`.
 - Seed/ingestion scripts: `scripts/*.ts`.
+- Tests: `tests/setup.ts` plus the nearest test/module `AGENTS.md`.
 
 ## Ownership Boundaries
 
@@ -79,4 +85,5 @@ Smoke `GET /health` after startup and `/client/chat` after Socket.IO changes.
 - `scripts/ingest-country-visa-rag.ts`
 - `scripts/ingest-photo-requirements-rag.ts`
 - `scripts/seed-*-form-fields.ts`
+- `tests/setup.ts`
 - `drizzle/*.sql`

@@ -6,8 +6,6 @@ import {
   BadgeCheck,
   CheckCircle2,
   CreditCard,
-  FileText,
-  Globe2,
   MessageCircle,
   Plane,
   ShieldCheck,
@@ -22,18 +20,13 @@ import {
   reconcileStripeSubscriptionReturn,
   type SubscriptionReturnState,
 } from "./data";
+import { buildPayPerGroups } from "./pay-per-data";
+import { PayPerApplicationBrowser } from "./pay-per-application-browser";
 import {
-  COMMERCIAL_PRODUCTS,
   formatCny,
   getCommercialProduct,
   type CommercialPaymentProvider,
-  type CommercialProduct,
 } from "@/lib/payments/commercial-products";
-import {
-  VISA_DESTINATION_REGION_GROUPS,
-  getVisaDestinationCountryName,
-  getVisaDestinationsForRegion,
-} from "@/lib/visa-destinations";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { cn } from "@/lib/utils";
 
@@ -77,23 +70,29 @@ const monthlyPlans = [
   },
 ] as const;
 
-const planHighlights = [
-  { icon: Globe2, labelKey: "allCountries" },
-  { icon: CreditCard, labelKey: "threeWays" },
-  { icon: FileText, labelKey: "officialFees" },
-] as const;
-
 const providerLabels: Record<CommercialPaymentProvider, string> = {
   stripe: "Stripe",
   wechat_pay: "微信",
   alipay: "支付宝",
+  airwallex_card: "银行卡",
+  airwallex_wechat: "微信",
+  airwallex_alipay: "支付宝",
 };
 
 const providerIcons = {
   stripe: CreditCard,
   wechat_pay: MessageCircle,
   alipay: WalletCards,
+  airwallex_card: CreditCard,
+  airwallex_wechat: MessageCircle,
+  airwallex_alipay: WalletCards,
 } satisfies Record<CommercialPaymentProvider, typeof CreditCard>;
+
+const subscriptionPaymentProviders: CommercialPaymentProvider[] = [
+  "airwallex_card",
+  "airwallex_wechat",
+  "airwallex_alipay",
+];
 
 function getParam(params: SubscriptionSearchParams | undefined, key: keyof SubscriptionSearchParams): string | null {
   const value = params?.[key];
@@ -129,6 +128,11 @@ function getErrorReturnState(error: string | null): SubscriptionReturnState {
       tone: "warning",
       title: "支付宝尚未配置",
       description: "请先配置支付宝 AppID、应用私钥和支付宝公钥。",
+    },
+    airwallex_unconfigured: {
+      tone: "warning",
+      title: "Airwallex 尚未配置",
+      description: "请先配置 Airwallex sandbox Client ID、API Key 和应用地址。",
     },
     app_url_missing: {
       tone: "error",
@@ -206,7 +210,7 @@ function PaymentButtons({
 }) {
   return (
     <div className="grid gap-2 sm:grid-cols-3">
-      {(Object.keys(providerLabels) as CommercialPaymentProvider[]).map((provider) => {
+      {subscriptionPaymentProviders.map((provider) => {
         const Icon = providerIcons[provider];
         const enabled = readiness[provider];
 
@@ -216,14 +220,14 @@ function PaymentButtons({
             <input type="hidden" name="provider" value={provider} />
             <button
               type="submit"
-              disabled={!enabled}
               className={cn(
                 "inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-full px-4 py-2 text-sm font-semibold transition focus-visible:outline-none focus-visible:ring-1",
                 featured
-                  ? "bg-white text-brand-500 hover:bg-brand-50 focus-visible:ring-white disabled:bg-white/20 disabled:text-white/50"
-                  : "border border-brand-500 bg-white text-brand-500 hover:bg-brand-50 focus-visible:ring-ring disabled:border-border disabled:text-muted-foreground",
+                  ? "bg-white text-brand-500 hover:bg-brand-50 focus-visible:ring-white"
+                  : "border border-brand-500 bg-white text-brand-500 hover:bg-brand-50 focus-visible:ring-ring",
+                !enabled && (featured ? "bg-white/80 text-brand-500/80" : "border-border text-muted-foreground"),
               )}
-              title={enabled ? `使用${providerLabels[provider]}支付` : `${providerLabels[provider]}尚未配置`}
+              title={enabled ? `使用${providerLabels[provider]}支付` : `检查${providerLabels[provider]}配置并支付`}
             >
               <Icon className="h-4 w-4" />
               {providerLabels[provider]}
@@ -233,37 +237,6 @@ function PaymentButtons({
       })}
     </div>
   );
-}
-
-function productCountryKey(product: CommercialProduct): string {
-  return product.country === "schengen_area" ? "schengen" : product.country ?? product.id;
-}
-
-function buildPayPerGroups() {
-  const payProducts = COMMERCIAL_PRODUCTS.filter((product) => product.kind === "pay_per_application");
-  const productsByCountry = new Map(payProducts.map((product) => [productCountryKey(product), product]));
-
-  return VISA_DESTINATION_REGION_GROUPS.map((region) => {
-    if (region.id === "schengen") {
-      const schengenProduct = productsByCountry.get("schengen");
-      return schengenProduct ? { region, items: [{ product: schengenProduct, name: region.name, nameZh: region.nameZh }] } : null;
-    }
-
-    const destinations = getVisaDestinationsForRegion(region.id);
-    const items = destinations
-      .map((destination) => {
-        const product = productsByCountry.get(destination.country);
-        if (!product) return null;
-        return {
-          product,
-          name: destination.countryName,
-          nameZh: destination.countryNameZh,
-        };
-      })
-      .filter((item): item is { product: CommercialProduct; name: string; nameZh: string } => Boolean(item));
-
-    return items.length > 0 ? { region, items } : null;
-  }).filter((group): group is NonNullable<typeof group> => Boolean(group));
 }
 
 export default async function SubscriptionPage({ searchParams }: SubscriptionPageProps) {
@@ -331,24 +304,6 @@ export default async function SubscriptionPage({ searchParams }: SubscriptionPag
           </div>
 
           <div className="grid gap-0 divide-y">
-            <section className="grid gap-4 p-6 md:grid-cols-3 lg:p-8">
-              {planHighlights.map((item) => {
-                const Icon = item.icon;
-
-                return (
-                  <div key={item.labelKey} className="rounded-xl border bg-white p-5">
-                    <Icon className="h-5 w-5 text-brand-500" />
-                    <p className="mt-4 text-base font-semibold text-foreground">
-                      {t(`highlights.${item.labelKey}.title`)}
-                    </p>
-                    <p className="mt-2 text-sm leading-6 text-muted-foreground">
-                      {t(`highlights.${item.labelKey}.body`)}
-                    </p>
-                  </div>
-                );
-              })}
-            </section>
-
             <section className="p-6 lg:p-8">
               <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
                 <div>
@@ -462,51 +417,18 @@ export default async function SubscriptionPage({ searchParams }: SubscriptionPag
                 </div>
 
                 <div className="space-y-4">
-                  {payPerGroups.map((group) => (
-                    <div key={group.region.id} className="rounded-xl border bg-white p-4 shadow-sm sm:p-5">
-                      <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
-                        <div>
-                          <h3 className="text-base font-semibold text-foreground">
-                            {isZh ? group.region.nameZh : group.region.name}
-                          </h3>
-                          <p className="text-sm text-muted-foreground">
-                            {isZh ? group.region.descriptionZh : group.region.description}
-                          </p>
-                        </div>
-                        <span className="w-fit rounded-full bg-brand-50 px-3 py-1 text-xs font-semibold text-brand-500">
-                          {group.items.length} {t("payPer.regionCountSuffix")}
-                        </span>
-                      </div>
-
-                      <div className="mt-4 grid gap-3">
-                        {group.items.map((item) => {
-                          const destination = getVisaDestinationsForRegion(group.region.id).find(
-                            (entry) => entry.country === item.product.country,
-                          );
-                          const displayName = destination
-                            ? getVisaDestinationCountryName(destination, locale)
-                            : isZh
-                              ? item.nameZh
-                              : item.name;
-
-                          return (
-                            <div
-                              key={item.product.id}
-                              className="grid gap-3 rounded-lg border bg-background px-4 py-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center"
-                            >
-                              <div className="min-w-0">
-                                <p className="truncate text-sm font-semibold text-foreground">{displayName}</p>
-                                <p className="mt-1 text-xs text-muted-foreground">{formatCny(item.product.amountFen)}</p>
-                              </div>
-                              <div className="min-w-[260px]">
-                                <PaymentButtons productId={item.product.id} readiness={readiness} />
-                              </div>
-                            </div>
-                          );
-                        })}
-                      </div>
-                    </div>
-                  ))}
+                  <PayPerApplicationBrowser
+                    isZh={isZh}
+                    readiness={readiness}
+                    regions={payPerGroups}
+                    labels={{
+                      searchPlaceholder: t("payPer.searchPlaceholder"),
+                      searchResults: t("payPer.searchResults"),
+                      noResults: t("payPer.noResults"),
+                      chooseRegion: t("payPer.chooseRegion"),
+                      itemSuffix: t("payPer.regionCountSuffix"),
+                    }}
+                  />
                   <p className="text-xs leading-5 text-muted-foreground">{t("payPer.feeNote")}</p>
                 </div>
               </div>

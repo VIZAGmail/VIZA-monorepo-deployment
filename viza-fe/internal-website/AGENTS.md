@@ -31,6 +31,10 @@ Travel AI UI, Supabase auth, and Next.js API proxy routes.
 - Applicant upload storage is the private Supabase Storage bucket
   `application-documents`, created by `supabase/migrations/**` with user-id
   path-prefix policies.
+- Commercial and agency payment records are stored in `payment_records`,
+  created by `supabase/migrations/*create_payment_records.sql`.
+- Customer support ticket storage for `/client/support` and `/admin/support`
+  is created by `supabase/migrations/*create_support_ticket_queue.sql`.
 - VIZA AI chat under `app/client/chat/**` and
   `components/client/companion/**`.
 - Customer service support center under `app/client/support/**`; keep it
@@ -42,6 +46,8 @@ Travel AI UI, Supabase auth, and Next.js API proxy routes.
 - User-facing copy through `messages/en.json` and `messages/zh.json`.
 - Local admin test-account bootstrap through
   `scripts/init-admin-account.mjs`.
+- Hosted Supabase auth email template sync through
+  `scripts/sync-supabase-auth-email-templates.mjs`.
 
 ## Source Of Truth
 
@@ -123,6 +129,7 @@ Smoke URLs:
 - `components/field-guidance-panel.tsx`
 - `lib/supabase/*`
 - `lib/document-upload-client.ts`
+- `lib/client/recent-application-form.ts`
 - `supabase/migrations/*`
 - `supabase/templates/*`
 - `lib/i18n/locale.ts`
@@ -130,4 +137,5 @@ Smoke URLs:
 - `lib/travel/*`
 - `messages/en.json`
 - `messages/zh.json`
+- `scripts/sync-supabase-auth-email-templates.mjs`
 - `types/*`
